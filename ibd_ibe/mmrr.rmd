@@ -1,0 +1,58 @@
+```{r}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  message = FALSE,
+  warning = FALSE
+)
+```
+
+```{r}
+install.packages("ecodist")
+library(ecodist)
+```
+
+```{r}
+nperm <- 9999
+
+sps <- c("GSL", "SSL")
+chrs  <- c("MT", "X", "AUT", "Y")
+
+r_table <- data.frame()
+p_table <- data.frame()
+
+for (sp in sps) {
+    D <- as.dist(as.matrix(read.table(
+    paste0("/home/aliya/1BIOINF/1SEALIONS/Y/mantel_test/dist_matrices/geo_dist_", sp, ".txt")
+    )))
+
+    E <- as.dist(as.matrix(read.table(
+    paste0("/home/aliya/1BIOINF/1SEALIONS/Y/mantel_test/dist_matrices/env_dist_", sp, ".txt")
+    )))
+
+    for (chr in chrs) {
+        G <- as.dist(as.matrix(read.table(
+            paste0("/home/aliya/1BIOINF/1SEALIONS/Y/mantel_test/dist_matrices/gen_dist_", sp, "_", chr, ".txt")
+        )))
+
+        mmrr <- MRM(G ~ D + E, nperm = nperm)
+
+        r_table <- rbind(r_table, data.frame(
+        species = sp,
+        chr = chr,
+        r_R2 = mmrr$r.squared[1],
+        r_betaD = mmrr$coef["D", 1],
+        r_betaE = mmrr$coef["E", 1]
+        ))
+
+        p_table <- rbind(p_table, data.frame(
+        species = sp,
+        chr = chr,
+        p_R2 = mmrr$r.squared[2],
+        p_betaD = mmrr$coef["D", 2],
+        p_betaE = mmrr$coef["E", 2]
+        ))
+    }
+}
+r_table
+p_table
+```

@@ -1,0 +1,71 @@
+```{r}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  message = FALSE,
+  warning = FALSE
+)
+```
+
+```{r}
+install.packages("vegan")
+# install.packages("ecodist")
+library(vegan)
+# library(ecodist)
+```
+
+```{r}
+nperm <- 9999
+
+sps <- c("GSL", "SSL") #c("GSL", "SSL")
+chrs  <- c("MT", "X", "AUT", "Y") #c("MT", "X", "AUT", "Y")
+
+r_table <- data.frame()
+p_table <- data.frame()
+
+for (sp in sps) {
+
+  D <- as.dist(as.matrix(read.table(
+    paste0("/home/aliya/1BIOINF/1SEALIONS/Y/mantel_test/dist_matrices/geo_dist_", sp, ".txt")
+  )))
+
+  E <- as.dist(as.matrix(read.table(
+    paste0("/home/aliya/1BIOINF/1SEALIONS/Y/mantel_test/dist_matrices/env_dist_", sp, ".txt")
+  )))
+
+  for (chr in chrs) {
+
+    G <- as.dist(as.matrix(read.table(
+      paste0("/home/aliya/1BIOINF/1SEALIONS/Y/mantel_test/dist_matrices/gen_dist_", sp, "_", chr, ".txt")
+    )))
+
+    GD <- mantel(G, D, method = "pearson", permutations = nperm)
+    GE <- mantel(G, E, method = "pearson", permutations = nperm)
+    DE <- mantel(D, E, method = "pearson", permutations = nperm)
+    GDE <- mantel.partial(G, D, E, method = "pearson", permutations = nperm)
+    GED <- mantel.partial(G, E, D, method = "pearson", permutations = nperm)
+
+    r_table <- rbind(r_table, data.frame(
+      species = sp,
+      chr = chr,
+      r_GD = GD$statistic,
+      r_GE = GE$statistic,
+      r_DE = DE$statistic,
+      r_GDE = GDE$statistic,
+      r_GED = GED$statistic
+    ))
+
+    p_table <- rbind(p_table, data.frame(
+      species = sp,
+      chr = chr,
+      p_GD = GD$signif,
+      p_GE = GE$signif,
+      p_DE = DE$signif,
+      p_GDE = GDE$signif,
+      p_GED = GED$signif
+    ))
+  }
+}
+
+r_table
+p_table
+```
