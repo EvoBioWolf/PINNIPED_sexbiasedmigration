@@ -2,12 +2,12 @@
 
 #SBATCH --export=none
 #SBATCH --get-user-env
-#SBATCH --clusters=biohpc_gen
-#SBATCH --partition=biohpc_gen_normal
+#SBATCH --clusters=***
+#SBATCH --partition=***
 #SBATCH --cpus-per-task=32
 #SBATCH --mem-per-cpu=2Gb
 #SBATCH --time=12:00:00
-#SBATCH --mail-user=yakupova@bio.lmu.de
+#SBATCH --mail-user=***
 #SBATCH --job-name=blast
 #SBATCH --output=_slurm_logs/%x-%j.out
 
