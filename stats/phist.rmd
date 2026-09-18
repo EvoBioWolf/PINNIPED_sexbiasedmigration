@@ -1,0 +1,185 @@
+```{r}
+
+library(vcfR)
+library(ape)
+library(pegas)
+
+runs <- list(
+  GSL_Y = list(
+    species  ="GSL",
+    chr      ="CM019820.2",
+    vcf_file ="/vcf_inv/GSL_CM019820.2_inv_MQ30.BQ30.hom_repOtZC.Q0_MQ60_DP1000mean0.25_NA0.1_bias0.5_632007pos.vcf.gz",
+    meta_stock_file= "/amova_lists/GSL_stocklist_male_amova.txt",
+    meta_pop_file= "/amova_lists/GSL_poplist_male_amova.txt"
+  ),
+  GSL_MT = list(
+    species  ="GSL",
+    chr      ="CM019821.1",
+    vcf_file ="/vcf_inv/GSL_CM019821.1_inv_MQ30.BQ30.hom_repOtZC.Q0_MQ40_DP250000_NA0.1_bias0.25_15349pos.vcf.gz",
+    meta_stock_file= "/amova_lists/GSL_stocklist_amova.txt",
+    meta_pop_file= "/amova_lists/GSL_poplist_amova.txt"
+  ),
+  SSL_Y = list(
+    species  ="SSL",
+    chr      ="CM019820.2",
+    vcf_file ="/vcf_inv/SSL_CM019820.2_inv_MQ30.BQ30.hom_repOtZC.Q0_MQ60_DP300mean0.25_NA0.1_bias0.5_584275pos.vcf.gz",
+    meta_stock_file= "/amova_lists/SSL_stocklist_male_amova.txt",
+    meta_pop_file= "/amova_lists/SSL_poplist_male_amova.txt"
+  ),
+  SSL_MT = list(
+    species  ="SSL",
+    chr      ="CM019821.1",
+    vcf_file ="/vcf_inv/SSL_CM019821.1_inv_MQ30.BQ30.hom_repOtZC.Q0_MQ40_DP100000_NA0.1_bias0.25_15299pos.vcf.gz",
+    meta_stock_file= "/amova_lists/SSL_stocklist_amova.txt",
+    meta_pop_file= "/amova_lists/SSL_poplist_amova.txt"
+  )
+)
+
+run_amova_phist <- function(vcf_file, meta_file, species, chr, outdir = ".", by="stock") {
+
+  vcf <- read.vcfR(vcf_file, verbose = FALSE)
+
+  gt  <- extract.gt(vcf, element = "GT")
+  ref <- vcf@fix[, "REF"]
+  alt <- vcf@fix[, "ALT"]
+
+  # DNA matrix from haploid GT (0/1/.)
+  dna_mat <- matrix(NA_character_,
+                    nrow = nrow(gt), ncol = ncol(gt),
+                    dimnames = list(rownames(gt), colnames(gt)))
+
+  for (i in seq_len(nrow(gt))) {
+    dna_mat[i, gt[i, ] == "0"] <- ref[i]
+    dna_mat[i, gt[i, ] == "1"] <- alt[i]
+    dna_mat[i, gt[i, ] == "."] <- "N"
+  }
+
+  dna <- as.DNAbin(t(dna_mat))  # samples in rows
+
+  # meta data (population/stock info)
+  meta <- read.table(meta_file, header = TRUE, stringsAsFactors = FALSE, sep = "\t")
+
+  meta$SampleID   <- trimws(meta$SampleID)
+  if (by == "pop") {
+    meta$Group <- trimws(meta$Population)
+  } else if (by == "stock") {
+    meta$Group <- trimws(meta$Group)
+  } else if (by == "stock.k2") {
+    meta$Group <- trimws(meta$GroupK2)
+  } else {
+    meta$Group <- trimws(meta$Group)
+  }
+  pop <- setNames(meta$Group, meta$SampleID)
+  pop <- pop[rownames(dna)]
+  pop <- factor(pop)
+
+  # drop samples with missing population annotation
+  keep <- !is.na(pop)
+  dna  <- dna[keep, ]
+  pop  <- droplevels(pop[keep])
+
+  # distances (haploid sequence distances, N treated as ambiguity)
+  D <- dist.dna(dna, model = "N", pairwise.deletion = TRUE, as.matrix = FALSE)
+  Dmat <- as.matrix(D)  # for pairwise subsetting
+
+  if (!dir.exists(outdir)) dir.create(outdir, recursive = TRUE)
+
+  # ----------------
+  # Global AMOVA
+  # ----------------
+  amova_global <- amova(D ~ pop)
+
+  global_out <- file.path(outdir, paste0("global_", species, "_", chr, ".txt"))
+  sink(global_out)
+  cat("VCF:  ", vcf_file, "\n", sep = "")
+  cat("META: ", meta_file, "\n", sep = "")
+  cat("\n--- Base composition (DNAbin) ---\n")
+  print(base.freq(dna))
+  cat("\n--- Sample counts by population (used) ---\n")
+  print(table(pop))
+  cat("\n--- Global AMOVA ---\n")
+  print(amova_global)
+  sink()
+
+  # ----------------
+  # Pairwise AMOVA
+  # ----------------
+  pops <- levels(pop)
+
+  for (i in seq_along(pops)) {
+    for (j in seq_along(pops)) {
+      if (i < j) {
+
+        idx <- pop %in% pops[c(i, j)]
+        pop_ij <- droplevels(pop[idx])
+
+        # if one pop is missing after filtering, or any pop has <2 samples, skip but still write a file
+        pair_out <- file.path(outdir, paste0(by, "_", species, "_", chr, "_", pops[i], "_", pops[j], ".txt"))
+        sink(pair_out)
+
+        cat("VCF:  ", vcf_file, "\n", sep = "")
+        cat("META: ", meta_file, "\n", sep = "")
+        cat("Pop1: ", pops[i], "\n", sep = "")
+        cat("Pop2: ", pops[j], "\n", sep = "")
+        cat("\n--- Sample counts in this comparison ---\n")
+        print(table(pop_ij))
+
+        if (nlevels(pop_ij) < 2) {
+          cat("\nSKIPPED: only one population present after subsetting.\n")
+          sink()
+          next
+        }
+
+        if (any(table(pop_ij) < 2)) {
+          cat("\nSKIPPED: need >=2 samples per population for stable AMOVA.\n")
+          sink()
+          next
+        }
+
+        Dij <- as.dist(Dmat[idx, idx])
+        am  <- amova(Dij ~ pop_ij)
+
+        cat("\n--- Pairwise AMOVA ---\n")
+        print(am)
+
+        sink()
+      }
+    }
+  }
+
+  invisible(TRUE)
+}
+
+# ------------------------------------------------------------
+# Run everything
+# ------------------------------------------------------------
+outdir <- "/amova_phist"
+
+for (nm in names(runs)) {
+  x <- runs[[nm]]
+  run_amova_phist(
+    vcf_file = x$vcf_file,
+    meta_file = x$meta_stock_file,
+    species = x$species,
+    chr = x$chr,
+    outdir = outdir,
+    by="stock.k3"
+  )
+  run_amova_phist(
+    vcf_file = x$vcf_file,
+    meta_file = x$meta_stock_file,
+    species = x$species,
+    chr = x$chr,
+    outdir = outdir,
+    by="stock.k2"
+  )
+  run_amova_phist(
+    vcf_file = x$vcf_file,
+    meta_file = x$meta_pop_file,
+    species = x$species,
+    chr = x$chr,
+    outdir = outdir,
+    by="pop"
+  )
+}
+```

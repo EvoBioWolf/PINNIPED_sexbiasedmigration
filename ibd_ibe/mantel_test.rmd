@@ -25,17 +25,17 @@ p_table <- data.frame()
 for (sp in sps) {
 
   D <- as.dist(as.matrix(read.table(
-    paste0("/home/aliya/1BIOINF/1SEALIONS/Y/mantel_test/dist_matrices/geo_dist_", sp, ".txt")
+    paste0("/mantel_test/dist_matrices/geo_dist_", sp, ".txt")
   )))
 
   E <- as.dist(as.matrix(read.table(
-    paste0("/home/aliya/1BIOINF/1SEALIONS/Y/mantel_test/dist_matrices/env_dist_", sp, ".txt")
+    paste0("/mantel_test/dist_matrices/env_dist_", sp, ".txt")
   )))
 
   for (chr in chrs) {
 
     G <- as.dist(as.matrix(read.table(
-      paste0("/home/aliya/1BIOINF/1SEALIONS/Y/mantel_test/dist_matrices/gen_dist_", sp, "_", chr, ".txt")
+      paste0("/mantel_test/dist_matrices/gen_dist_", sp, "_", chr, ".txt")
     )))
 
     GD <- mantel(G, D, method = "pearson", permutations = nperm)
